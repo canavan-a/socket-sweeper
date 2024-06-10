@@ -18,6 +18,7 @@ func NewGameBoard(x, y, bombs int) (gb GameBoard) {
 	gb.Grid = board
 
 	gb.SeedBombs(bombs)
+	gb.SeedNumbers()
 
 	return
 }
@@ -75,8 +76,10 @@ func (gb *GameBoard) Check(x, y int) (valid bool) {
 	return true
 }
 
-func (gb *GameBoard) Open(x, y int) {
+func (gb *GameBoard) Open(x, y int) (isBomb bool) {
 	gb.Grid[y][x].Open()
+
+	return gb.Grid[y][x].IsBomb
 }
 
 func (gb *GameBoard) SeedBombs(bombs int) {
@@ -141,4 +144,43 @@ func (gb *GameBoard) BombCheck(x, y int) bool {
 	}
 
 	return false
+}
+
+func (gb *GameBoard) ToOutputValue() [][]string {
+
+	board := [][]string{}
+
+	for y := range gb.Grid {
+		row := gb.Grid[y]
+		boardRow := []string{}
+		for x := range row {
+			if row[x].IsOpen {
+				if row[x].IsBomb {
+					boardRow = append(boardRow, "B")
+				} else {
+					boardRow = append(boardRow, fmt.Sprint(row[x].Number))
+				}
+			} else {
+				boardRow = append(boardRow, "+")
+			}
+		}
+		board = append(board, boardRow)
+	}
+
+	return board
+
+}
+
+// assume all conditions for loss have been satisfied
+func (gb *GameBoard) WinCheck() (won bool) {
+	for y := range gb.Grid {
+		row := gb.Grid[y]
+		for x := range row {
+			if gb.Grid[y][x].IsBomb {
+
+			}
+		}
+	}
+
+	return
 }
