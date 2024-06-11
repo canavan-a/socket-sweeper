@@ -1,4 +1,4 @@
-package board
+package sweeper
 
 type Voxel struct {
 	IsBomb bool

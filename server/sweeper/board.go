@@ -1,4 +1,4 @@
-package board
+package sweeper
 
 import (
 	"fmt"
@@ -172,15 +172,17 @@ func (gb *GameBoard) ToOutputValue() [][]string {
 }
 
 // assume all conditions for loss have been satisfied
-func (gb *GameBoard) WinCheck() (won bool) {
+func (gb *GameBoard) WinCheck() bool {
+
 	for y := range gb.Grid {
 		row := gb.Grid[y]
 		for x := range row {
-			if gb.Grid[y][x].IsBomb {
-
+			// closed and not a bomb
+			if !gb.Grid[y][x].IsOpen && !gb.Grid[y][x].IsBomb {
+				return false
 			}
 		}
 	}
 
-	return
+	return true
 }
