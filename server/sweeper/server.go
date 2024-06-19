@@ -1,6 +1,7 @@
 package sweeper
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -23,16 +24,91 @@ type Game struct {
 }
 
 type ServerGames struct {
-	Games map[string]*Game
-	Mutex sync.Mutex
+	Games           map[string]*Game
+	Mutex           sync.Mutex
+	MenuConnections map[*websocket.Conn]bool
 }
 
 func InitServerGames() (sg *ServerGames) {
 	sg = &ServerGames{
-		Games: make(map[string]*Game),
-		Mutex: sync.Mutex{},
+		Games:           make(map[string]*Game),
+		Mutex:           sync.Mutex{},
+		MenuConnections: make(map[*websocket.Conn]bool),
 	}
 	return
+}
+
+func (sg *ServerGames) MenuConnectionRoute(c *gin.Context) {
+	conn, err := Upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid upgrader function"})
+		return
+	}
+
+	sg.Mutex.Lock()
+	sg.MenuConnections[conn] = true
+	sg.Mutex.Unlock()
+
+	defer func() {
+		sg.Mutex.Lock()
+		delete(sg.MenuConnections, conn)
+		sg.Mutex.Unlock()
+		conn.Close()
+	}()
+
+	data, err := sg.GetMenuListJSON()
+	if err != nil {
+		c.JSON(400, gin.H{"error": "issue creating json"})
+		return
+	}
+
+	err = conn.WriteMessage(1, data)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "issue publishing menu entries"})
+		return
+	}
+
+	for {
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (sg *ServerGames) BoradcastToMenuConnections(msgType int, data []byte) (err error) {
+	// need to publish menu entries to all conns on new game
+	for conn := range sg.MenuConnections {
+		err = conn.WriteMessage(msgType, data)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (sg *ServerGames) GetMenuListJSON() (data []byte, err error) {
+	type MenuEntry struct {
+		User   string `json:"username"`
+		GameID string `json:"id"`
+	}
+
+	var MenuEntries []MenuEntry
+
+	for _, Game := range sg.Games {
+		MenuEntries = append(MenuEntries, MenuEntry{
+			User:   Game.Username,
+			GameID: Game.PublicSecret,
+		})
+	}
+
+	data, err = json.Marshal(MenuEntries)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return data, nil
 }
 
 // ws handler function to
@@ -115,7 +191,7 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			break
+			return
 		}
 		// read msg here and do something aka play game
 		fmt.Println(msg)
