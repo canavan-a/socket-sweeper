@@ -56,13 +56,13 @@ func (sg *ServerGames) MenuConnectionRoute(c *gin.Context) {
 		conn.Close()
 	}()
 
-	data, err := sg.GetMenuListJSON()
+	allGames, err := sg.GetMenuListJSON()
 	if err != nil {
 		c.JSON(400, gin.H{"error": "issue creating json"})
 		return
 	}
 
-	err = conn.WriteMessage(1, data)
+	err = conn.WriteMessage(1, allGames)
 	if err != nil {
 		c.JSON(400, gin.H{"error": "issue publishing menu entries"})
 		return
@@ -133,7 +133,7 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 	if exists {
 		sg.Games[publisherSecret].Publisher = conn
 	} else {
-
+		// new game section
 		user := c.Query("user")
 		if user == "" {
 			user = "anon"
@@ -172,6 +172,20 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 		}
 		// add game
 		sg.Games[publisherSecret] = &game
+
+		// publish to home connections that new game has been created
+		allGames, err := sg.GetMenuListJSON()
+		if err != nil {
+			c.JSON(400, gin.H{"error": "could not generate game list"})
+			return
+		}
+
+		err = sg.BoradcastToMenuConnections(1, allGames)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "could not broadcast to home page conns"})
+			return
+		}
+
 	}
 	// add publisher connection to subscribers
 	sg.Games[publisherSecret].Mutex.Lock()
@@ -207,4 +221,25 @@ func (g *Game) BroadcastToSubs(msgType int, msg []byte) (err error) {
 		}
 	}
 	return
+}
+
+// route determines all subscriber sockets, even used by the game publisher to view the board
+func (sg *ServerGames) SubscriberRoute(c *gin.Context) {
+	publicSecret := c.Query("publicSecret")
+	if publicSecret == "" {
+		c.JSON(400, gin.H{"error": "could not parse game public secret"})
+		return
+	}
+
+}
+
+func (sg *ServerGames) getPublicGame(publicSecret string) *Game {
+	for _, game := range sg.Games {
+		if game.PublicSecret == publicSecret {
+			// upgrade con on the game
+			return game
+
+		}
+	}
+	return nil
 }
