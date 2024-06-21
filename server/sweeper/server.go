@@ -202,6 +202,13 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 
 	sg.Mutex.Unlock()
 
+	sg.Mutex.Lock()
+	game, exists := sg.Games[publisherSecret]
+	if !exists {
+		return
+	}
+	sg.Mutex.Unlock()
+
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -210,10 +217,16 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 		// read msg here and do something aka play game
 		fmt.Println(msg)
 
+		// game.Board.Open()
+
+		// get picked coordinates...
+
 	}
 }
 
 func (g *Game) BroadcastToSubs(msgType int, msg []byte) (err error) {
+	g.Mutex.Lock()
+	defer g.Mutex.Unlock()
 	for sub := range g.Subscribers {
 		err = sub.WriteMessage(msgType, msg)
 		if err != nil {
@@ -231,9 +244,44 @@ func (sg *ServerGames) SubscriberRoute(c *gin.Context) {
 		return
 	}
 
+	game := sg.getPublicGame(publicSecret)
+	if game == nil {
+		c.JSON(400, gin.H{"error": "public game could not be found"})
+		return
+	}
+
+	conn, err := Upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "public game could not be found"})
+		return
+	}
+
+	// add conn to subscribers
+
+	game.Mutex.Lock()
+	game.Subscribers[conn] = true
+	game.Mutex.Unlock()
+
+	defer func() {
+		game.Mutex.Lock()
+		delete(game.Subscribers, conn)
+		game.Mutex.Unlock()
+		conn.Close()
+	}()
+
+	for {
+		_, _, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+	}
+
 }
 
 func (sg *ServerGames) getPublicGame(publicSecret string) *Game {
+	sg.Mutex.Lock()
+	defer sg.Mutex.Unlock()
+
 	for _, game := range sg.Games {
 		if game.PublicSecret == publicSecret {
 			// upgrade con on the game
