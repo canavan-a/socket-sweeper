@@ -209,6 +209,8 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 	}
 	sg.Mutex.Unlock()
 
+	fmt.Println(game.Username)
+
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
