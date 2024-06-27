@@ -11,7 +11,13 @@ const Game = () => {
 
   const { websocketServer } = useContext(GlobalContext);
 
-  const { ws, reconnect } = useWebSocket(`${websocketServer}/`);
+  //dynamically set this if we are making game or reconnecting to game
+  const publisherSecret = "hello";
+  const user = "aidan";
+
+  const { ws: publisher, reconnect: reconnectPublisher } = useWebSocket(
+    `${websocketServer}/publish?publisherSecret=${publisherSecret}&user=${user}`
+  );
 
   const [board, setBoard] = useState([]);
 
@@ -22,37 +28,37 @@ const Game = () => {
   }, []);
 
   useEffect(() => {
-    if (!ws) return;
+    if (!publisher) return;
 
-    ws.onopen = () => {
+    publisher.onopen = () => {
       console.log("WebSocket connected");
     };
 
-    ws.onmessage = (event) => {
+    publisher.onmessage = (event) => {
       console.log("Message received:", event.data);
       // Handle incoming messages here
     };
 
-    ws.onclose = () => {
+    publisher.onclose = () => {
       console.log("WebSocket disconnected");
       // Optional: Reconnect logic
     };
 
-    ws.onerror = (error) => {
+    publisher.onerror = (error) => {
       console.error("WebSocket error:", error);
     };
-  }, [ws]);
+  }, [publisher]);
 
   const sendCoordinate = (x, y) => {
     console.log(x, y);
     // send the coordinate
-    ws.send();
+    publisher.send();
   };
 
   return (
     <div>
       game
-      <button className="btn btn-xs" onClick={reconnect}></button>
+      <button className="btn btn-xs" onClick={reconnectPublisher}></button>
     </div>
   );
 };
