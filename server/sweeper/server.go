@@ -113,7 +113,7 @@ func (sg *ServerGames) GetMenuListJSON() (data []byte, err error) {
 
 // ws handler function to
 func (sg *ServerGames) PublisherRoute(c *gin.Context) {
-
+	fmt.Println("publisher connection initiated")
 	publisherSecret := c.Query("publisherSecret")
 	if publisherSecret == "" {
 		c.JSON(400, gin.H{"error": "no game found"})
@@ -127,12 +127,16 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 		return
 	}
 
+	fmt.Println("upgraded to ws")
+
 	sg.Mutex.Lock()
 	// find a game with publisher secret
 	_, exists := sg.Games[publisherSecret]
 	if exists {
+		fmt.Println("connecting to existing game")
 		sg.Games[publisherSecret].Publisher = conn
 	} else {
+		fmt.Println("creating game from scratch")
 		// new game section
 		user := c.Query("user")
 		if user == "" {
@@ -141,7 +145,8 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 
 		x, err := strconv.ParseInt(c.Query("x"), 10, 64)
 		if err != nil {
-			c.JSON(400, gin.H{"error": "no x param included"})
+			fmt.Println("could not parse x")
+			conn.Close()
 			return
 		}
 
@@ -170,6 +175,13 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 			StartTime:    time.Now(),
 			Board:        NewGameBoard(int(x), int(y), int(bombs)),
 		}
+
+		// override public secret if given
+		if c.Query("publicSecret") != "" {
+			game.PublicSecret = c.Query("publicSecret")
+		}
+
+		fmt.Println(game.PublicSecret)
 		// add game
 		sg.Games[publisherSecret] = &game
 
@@ -192,6 +204,7 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 	sg.Games[publisherSecret].Subscribers[conn] = true
 	sg.Games[publisherSecret].Mutex.Unlock()
 
+	sg.Mutex.Unlock()
 	// remove publisher from subscribers
 	defer func() {
 		sg.Games[publisherSecret].Mutex.Lock()
@@ -199,8 +212,6 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 		sg.Games[publisherSecret].Mutex.Unlock()
 		conn.Close()
 	}()
-
-	sg.Mutex.Unlock()
 
 	sg.Mutex.Lock()
 	game, exists := sg.Games[publisherSecret]
