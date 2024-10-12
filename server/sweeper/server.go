@@ -133,11 +133,12 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 	// find a game with publisher secret
 	_, exists := sg.Games[publisherSecret]
 	if exists {
+		// game already exists
 		fmt.Println("connecting to existing game")
 		sg.Games[publisherSecret].Publisher = conn
 	} else {
 		fmt.Println("creating game from scratch")
-		// new game section
+		// must create game
 		user := c.Query("user")
 		if user == "" {
 			user = "anon"
@@ -221,14 +222,33 @@ func (sg *ServerGames) PublisherRoute(c *gin.Context) {
 	sg.Mutex.Unlock()
 
 	fmt.Println(game.Username)
+	fmt.Println(game.PublicSecret)
 
 	for {
+		// game loop
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
 		// read msg here and do something aka play game
-		fmt.Println(msg)
+		p := Parser{}
+		x, y, err := p.parseCoordinates(msg)
+		if err != nil{
+			return
+		}
+		fmt.Println("coords:")
+		fmt.Println(x)
+		fmt.Println(y)
+		game.Mutex.Lock()
+		_ = game.Board.Open(x, y)
+		boardSlice := game.Board.ToOutputValue()
+		game.Mutex.Unlock()
+		jsonData, err := json.Marshal(boardSlice)
+		if err != nil {
+			return
+		}
+		
+		game.BroadcastToSubs(websocket.TextMessage,jsonData)
 
 		// game.Board.Open()
 
@@ -256,13 +276,13 @@ func (sg *ServerGames) SubscriberRoute(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "could not parse game public secret"})
 		return
 	}
-
+	fmt.Println("publicSecret", publicSecret)
 	game := sg.getPublicGame(publicSecret)
 	if game == nil {
 		c.JSON(400, gin.H{"error": "public game could not be found"})
 		return
 	}
-
+	fmt.Println("found game")
 	conn, err := Upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		c.JSON(400, gin.H{"error": "public game could not be found"})
@@ -270,17 +290,31 @@ func (sg *ServerGames) SubscriberRoute(c *gin.Context) {
 	}
 
 	// add conn to subscribers
+	fmt.Println("found public game")
 
 	game.Mutex.Lock()
 	game.Subscribers[conn] = true
+	//send yourself the board
+	boardSlice := game.Board.ToOutputValue()
 	game.Mutex.Unlock()
-
 	defer func() {
 		game.Mutex.Lock()
 		delete(game.Subscribers, conn)
 		game.Mutex.Unlock()
 		conn.Close()
 	}()
+
+	jsonData, err := json.Marshal(boardSlice)
+	if err != nil {
+		return
+	}
+
+	err = conn.WriteMessage(websocket.TextMessage, jsonData)
+	if err != nil{
+		return
+	}
+
+	
 
 	for {
 		_, _, err := conn.ReadMessage()
