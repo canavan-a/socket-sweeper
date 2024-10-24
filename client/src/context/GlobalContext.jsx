@@ -16,9 +16,15 @@ export const GlobalContextProvider = ({ children }) => {
       : `wss://${window.location.hostname}`
   );
 
+  const [gamePublicSecret, setGamePublicSecret] = useState("");
+  const [gamePrivateSecret, setGamePrivateSecret] = useState("");
   const contextValue = {
     server,
     websocketServer,
+    gamePublicSecret,
+    setGamePublicSecret,
+    gamePrivateSecret,
+    setGamePrivateSecret,
   };
 
   return (
